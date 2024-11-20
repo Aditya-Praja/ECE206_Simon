@@ -1,0 +1,152 @@
+//==============================================================================
+// Control Module for Simon Project
+//==============================================================================
+
+module SimonControl(
+	// External Inputs
+	input        clk,           // Clock
+	input        rst,           // Reset
+	input        is_legal,
+	input        p_eq,
+	input        w_eq,
+	input [3:0] pattern,
+	input level,
+	output reg read_count,
+	output reg [2:0] mode_leds,
+	output reg  w_en,
+	output reg  level_load,
+	output reg  pattern_led_sel
+);
+
+	reg [1:0] state;
+	reg [1:0] next_state;
+	
+	// also localparam LED_PATTERN_(state)?
+	
+	localparam LED_MODE_INPUT    = 3'b001;
+	localparam LED_MODE_PLAYBACK = 3'b010;
+	localparam LED_MODE_REPEAT   = 3'b100;
+	localparam LED_MODE_DONE     = 3'b111;
+
+	// Declare State Names Here
+	//localparam STATE_ONE = 2'd0;
+	
+	localparam STATE_INPUT = 2'b00;
+	localparam STATE_PLAYBACK = 2'b01;
+	localparam STATE_REPEAT = 2'b10;
+	localparam STATE_DONE = 2'b11;
+	
+	
+	always @(*) begin
+	next_state = state;
+	case (state)
+	
+	// Input	
+	STATE_INPUT: begin
+	 if (is_legal) begin
+           next_state = STATE_PLAYBACK;
+           w_en = 1;
+        end
+     else if (~is_legal) begin // if not legal, remain in input
+           next_state = STATE_INPUT;
+        end
+     end 
+     
+     // Playback
+     STATE_PLAYBACK: begin
+     if (w_eq) begin
+                next_state = STATE_REPEAT;
+            end 
+     else if (~w_eq) begin
+                next_state = STATE_PLAYBACK; 
+            end
+     end
+    
+     // Repeat
+     STATE_REPEAT: begin
+	 if (~p_eq) begin
+                next_state = STATE_DONE;
+            end 
+    else if (p_eq) begin
+                next_state = STATE_INPUT;
+            end
+     end
+     
+     // Done
+     STATE_DONE: begin
+     if (rst) begin
+                next_state = STATE_INPUT;
+            end
+       end
+       endcase
+	end
+	
+	// Output Combinational Logic
+	always @(*) begin
+    // Default values
+    mode_leds = LED_MODE_INPUT;
+    read_count = 0;
+    level_load = 0;
+    w_en = 0;
+    
+     if (rst) begin
+        read_count = 1;
+        level_load = 1;
+        end
+    
+    if (state == STATE_INPUT) begin
+    mode_leds = LED_MODE_INPUT;
+    end 
+  
+    else if (state == STATE_PLAYBACK) begin
+    mode_leds = LED_MODE_PLAYBACK;
+    end 
+    
+    else if (state == STATE_REPEAT) begin
+    mode_leds = LED_MODE_REPEAT;
+    end 
+    
+    else if (state == STATE_DONE) begin
+    mode_leds = LED_MODE_DONE;
+    end 
+
+    // changed
+
+    case (state)
+        STATE_INPUT: begin
+            pattern_led_sel = 0;
+            if (is_legal) begin
+            w_en = 1;
+            read_count = 1;
+            end
+        end
+
+       STATE_PLAYBACK: begin
+            read_count = 1;
+            pattern_led_sel = 1;
+        end
+
+        STATE_REPEAT: begin
+            read_count = 0;
+            pattern_led_sel = 0;
+        end
+
+        STATE_DONE: begin
+            if (w_eq) begin
+            read_count = 0;
+            end
+            pattern_led_sel = 1;
+        end
+    endcase
+	end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            state <= STATE_INPUT;  // Reset to initial state on rst
+            end
+        else begin
+            state <= next_state;  // Update state
+            end
+    end
+    
+endmodule
