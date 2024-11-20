@@ -1,0 +1,122 @@
+//==============================================================================
+// Datapath for Simon Project
+//==============================================================================
+
+module SimonDatapath(
+	// External Inputs
+	input        clk,           // Clock
+	input        level,         // Switch for setting level
+	input  [3:0] pattern,       // Switches for creating pattern
+
+	// Datapath Control Signals
+	input w_data,
+	input rst,
+	input read_count,
+	input read_rst,
+	input w_en, 
+	input level_load, 
+	input pattern_led_sel,
+
+	// Datapath Outputs to Control
+	output reg is_legal,
+	output reg w_eq,
+	output reg p_eq,
+
+	// External Outputs
+	output reg [3:0] pattern_leds,   // LED outputs for pattern
+	output [2:0] mode_leds
+);
+
+	// Declare Local Vars Here
+	reg [5:0] read_index;
+	reg [5:0] write_index;
+	reg [1:0] level_reg;
+	wire [3:0] r_data;
+
+	//----------------------------------------------------------------------
+	// Internal Logic -- Manipulate Registers, ALU's, Memories Local to
+	// the Datapath
+	//----------------------------------------------------------------------
+
+	always @(posedge clk) begin
+	    
+	    // save level
+	    if (level_load) begin
+	    level_reg <= level;
+	    end
+	    
+        // if rst, reset RF and write index to 0;
+		if (rst) begin
+		    write_index <= 6'd0;
+		    read_index <= 6'd0;
+		end
+		
+		// increment read
+		if (read_count) begin
+		    read_index <= read_index + 6'd1;
+		end
+		
+		if (w_en) begin
+		    write_index <= write_index + 1'b1;
+		end
+		
+		// reset read
+		if (rst || w_eq || ~p_eq) begin
+		    read_index <= 6'd0;
+		end	
+    
+		
+	end
+
+	// 64-entry 4-bit memory (from Memory.v) -- Fill in Ports!
+	Memory mem(
+		.clk     (clk),
+		.rst     (rst),
+		.r_addr  (read_index),
+		.w_addr  (write_index ),
+		.w_data  (pattern),
+		.w_en    (w_en),
+		.r_data  (r_data)
+	);
+
+	//----------------------------------------------------------------------
+	// Output Logic -- Set Datapath Outputs
+	//----------------------------------------------------------------------
+
+	always @( * ) begin
+	    w_eq = 0;
+	    p_eq = 0;
+	    is_legal = 0;
+	
+	
+		if (write_index == read_index) begin
+		    w_eq <= 1'b1;
+		end
+		
+		if (r_data == pattern) begin
+		    p_eq <= 1'b1;
+		end
+		
+		// easy mode is_legal
+		if ((pattern == 4'b0001 || pattern == 4'b0010 || 
+		    pattern == 4'b0100 || pattern == 4'b1000) && level_reg == 0) begin
+		    is_legal <= 1'b1;
+		end
+		
+		// hard mode is_legal
+		else if (level_reg == 1) begin
+		    is_legal <= 1'b1;
+		end
+		
+		if (pattern_led_sel == 0) begin
+            pattern_leds <= pattern;
+        end
+        
+        if (pattern_led_sel == 1) begin
+            pattern_leds <= r_data;
+        end
+        
+	end
+
+    
+    endmodule
